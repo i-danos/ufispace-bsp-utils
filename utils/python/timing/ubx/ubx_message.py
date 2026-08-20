@@ -25,7 +25,7 @@ class UBXMessage:
     payload = []
 
     def __init__(self, msg):
-        self.class_id = msg[2:4]
+        self.class_id = [ msg[2], msg[3] ]
         self.length = msg[4]+(msg[5]<<8)
         self.payload = msg[6:(6+self.length)]
         pass

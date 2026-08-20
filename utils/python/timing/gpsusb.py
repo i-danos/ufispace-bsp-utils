@@ -133,19 +133,20 @@ class GPSUSB:
             
         while read:
             try:
-                resp = ep.read(100)
+                resp = ep.read(500)
                 self.logger.debug("GPS read: %s", resp)
                 if len(resp) == 0:
                     continue
 
                 msg = UBXMessage(resp)
-                if msg.class_id.tolist() == ubx_utils.CLASS_ACK_ACK:
+                if msg.class_id == ubx_utils.CLASS_ACK_ACK:
                     ack = True
                     read = False
-                elif msg.class_id.tolist() == ubx_utils.CLASS_ACK_NAK:
+                elif msg.class_id == ubx_utils.CLASS_ACK_NAK:
                     ack = False
                     read = False
-                elif msg.class_id.tolist() == class_id:
+                elif msg.class_id == class_id:
+                    ack = True
                     response = msg.getMessage()
                     read = False
             except:
@@ -173,7 +174,7 @@ class GPSUSB:
         read = True
         while read:
             try:
-                resp = ep.read(100)
+                resp = ep.read(500)
                 #self.logger.debug(resp)
             except:
                 # Continuous read until timeout
@@ -181,28 +182,28 @@ class GPSUSB:
 
     def _gps_set(self, cmd):
         # Prepare to read
-        pool = ThreadPool(processes=1)
-        msg = UBXMessage(cmd)
-        async_result = pool.apply_async(self._read, (msg.class_id,))
+        with ThreadPool(processes=1) as pool:
+            msg = UBXMessage(cmd)
+            async_result = pool.apply_async(self._read, (msg.class_id,))
 
-        # Write command
-        self._write(cmd)
+            # Write command
+            self._write(cmd)
 
-        (result, response) = async_result.get()
+            (result, response) = async_result.get()
 
         if result is False:
             raise ValueError("Failed to set GPS configuration")
 
     def _gps_get(self, cmd):
         # Prepare to read
-        pool = ThreadPool(processes=1)
-        msg = UBXMessage(cmd)
-        async_result = pool.apply_async(self._read, (msg.class_id,))
+        with ThreadPool(processes=1) as pool:
+            msg = UBXMessage(cmd)
+            async_result = pool.apply_async(self._read, (msg.class_id,))
 
-        # Write command
-        self._write(cmd)
+            # Write command
+            self._write(cmd)
 
-        (result, response) = async_result.get()
+            (result, response) = async_result.get()
 
         if result is False:
             raise ValueError("Failed to get GPS configuration")

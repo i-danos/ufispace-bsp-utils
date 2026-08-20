@@ -1,0 +1,4 @@
+portio
+pyusb
+serial
+smbus

@@ -27,6 +27,7 @@ from cpld.cpld_reg import CPLDCPUReg
 from protocol.lpc import LPC
 from protocol.lpc import LPCDevType
 from smbus import SMBus
+from i2c_mux.i2c_mux import I2CMux
 
 class PCA9535_CMD:
     
@@ -72,7 +73,7 @@ class CPLD:
     BUILD_REV_A4_STR = "A4"
 
     I2C_ADDR_9546_ROOT = 0x75
-    I2C_ADDR_BRD_ID_CHAL = 0x04
+    I2C_ADDR_BRD_ID_CHAL = 2
     I2C_ADDR_BRD_ID = 0x20
     
     InterruptMaskConst = {
@@ -143,6 +144,7 @@ class CPLD:
         log = Logger(__name__)
         self.logger = log.getLogger()
         self.lpc = LPC()
+        self.i2c_mux = I2CMux().MUXs
         # Get hardware version
         board_id = self.lpc.regGet(LPCDevType.CPLD_ON_MAIN_BOARD, 0x00)
         hw_rev = (board_id & 0b00001100) >> 2
@@ -170,37 +172,40 @@ class CPLD:
     def deinit(self):
         pass
 
+    def get_channel_bus(self, channel):
+        if self.i2c_mux["9546_ROOT1"].ch_bus != None:
+            bus_num = self.i2c_mux["9546_ROOT1"].ch_bus[channel]
+            return SMBus(bus_num)
+        else:
+            bus = SMBus(0)
+            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 1 << channel)
+            return bus
+
+    def close_channel_bus(self, bus):
+        if self.i2c_mux["9546_ROOT1"].ch_bus is None:
+            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)
+        bus.close()
+
     ########## FOR CPLD UTILITY ##########
     def check_hw_rev_mux(self):
         try:
-            bus = SMBus(0)
-            
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0) 
+            bus = self.get_channel_bus(0)
+            self.close_channel_bus(bus)
             
             return "EXIST"
         except Exception as e:
             self.logger.error("Get MUX fail (it's alpha board), error: " + str(e))
             return "NOT_EXIST"   
-        finally:
-            if bus != None:
-                bus.close()     
                 
     def get_brd_id_info(self):
+        bus = self.get_channel_bus(self.I2C_ADDR_BRD_ID_CHAL)
         try:
-            bus = SMBus(0)
-            
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, self.I2C_ADDR_BRD_ID_CHAL)  
-            
             brd_info = bus.read_byte_data(self.I2C_ADDR_BRD_ID, PCA9535_CMD.PCA9535_REG_PORT1_IN)
             
             return brd_info
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)
-            
             if bus != None:
-                bus.close()         
+                self.close_channel_bus(bus)
         
     def get_board_id(self):
         try:

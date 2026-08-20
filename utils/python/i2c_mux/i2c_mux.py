@@ -21,12 +21,22 @@ import sys
 from common.logger import Logger
 
 class PCA954x:
+    PATH_SYS_I2C_DEVICES = "/sys/bus/i2c/devices"
 
     def __init__(self, name, address, bus_num, bus_of_channel):
         self.name = self.NAME + " " + name
         self.address = address
         self.bus_num = bus_num
-        self.ch_bus = bus_of_channel
+        self.potential_ch_bus = bus_of_channel
+
+    @property
+    def ch_bus(self):
+        # Detect whether the system is using device per mux channel,
+        # or otherwise one global i2c device
+        if os.path.exists(self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.potential_ch_bus[0])):
+            return self.potential_ch_bus
+        else:
+            return None
 
 class PCA9548(PCA954x):
 
@@ -47,6 +57,7 @@ class I2CMux:
     I2C_ADDR_9548_SFP3 = 0x73
     I2C_ADDR_9548_SFP4 = 0x74
     I2C_ADDR_9546_QSFP = 0x70
+    I2C_ADDR_9546_ROOT1 = 0x75
 
     NUM_I801_DEVICE = 0
     PATH_SYS_I2C_DEVICES = "/sys/bus/i2c/devices"
@@ -102,10 +113,16 @@ class I2CMux:
                                   self.NUM_I801_DEVICE + 39,
                                   self.NUM_I801_DEVICE + 40)
 
+        self.NUM_MUX_9546_ROOT1 = (self.NUM_I801_DEVICE + 41,
+                                   self.NUM_I801_DEVICE + 42,
+                                   self.NUM_I801_DEVICE + 43,
+                                   self.NUM_I801_DEVICE + 44)
+
         # MUX Alias
         self.I2C_BUS_MUX_ROOT = self.NUM_I801_DEVICE
         self.I2C_BUS_MUX_SFP = self.NUM_MUX_9546_ROOT[3]
         self.I2C_BUS_MUX_QSFP = self.NUM_MUX_9546_ROOT[3]
+        self.I2C_BUS_MUX_ROOT1 = self.NUM_I801_DEVICE
 
         # Sysfs path
         self.PATH_MUX_9546_ROOT_CHAN0 = self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.NUM_MUX_9546_ROOT[0])
@@ -117,6 +134,8 @@ class I2CMux:
         self.PATH_MUX_9548_SFP_PARENT = self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.I2C_BUS_MUX_SFP)
         self.PATH_MUX_9546_QSFP_CHAN0 = self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.NUM_MUX_9546_QSFP[0])
         self.PATH_MUX_9546_QSFP_PARENT = self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.I2C_BUS_MUX_QSFP)
+        self.PATH_MUX_9546_ROOT1_CHAN0 = self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.NUM_MUX_9546_ROOT1[0])
+        self.PATH_MUX_9546_ROOT1_PARENT = self.PATH_SYS_I2C_DEVICES + "/i2c-" + str(self.I2C_BUS_MUX_ROOT1)
 
         self.MUXs = {
             "9546_ROOT": PCA9546("ROOT", self.I2C_ADDR_9546_ROOT, self.I2C_BUS_MUX_ROOT, self.NUM_MUX_9546_ROOT),
@@ -124,7 +143,8 @@ class I2CMux:
             "9548_SFP2": PCA9548("SFP2", self.I2C_ADDR_9548_SFP2, self.I2C_BUS_MUX_SFP, self.NUM_MUX_9548_SFP2),
             "9548_SFP3": PCA9548("SFP3", self.I2C_ADDR_9548_SFP3, self.I2C_BUS_MUX_SFP, self.NUM_MUX_9548_SFP3),
             "9548_SFP4": PCA9548("SFP4", self.I2C_ADDR_9548_SFP4, self.I2C_BUS_MUX_SFP, self.NUM_MUX_9548_SFP4),
-            "9546_QSFP": PCA9546("QSFP", self.I2C_ADDR_9546_QSFP, self.I2C_BUS_MUX_QSFP, self.NUM_MUX_9546_QSFP)
+            "9546_QSFP": PCA9546("QSFP", self.I2C_ADDR_9546_QSFP, self.I2C_BUS_MUX_QSFP, self.NUM_MUX_9546_QSFP),
+            "9546_ROOT1": PCA9546("ROOT1", self.I2C_ADDR_9546_ROOT1, self.I2C_BUS_MUX_ROOT1, self.NUM_MUX_9546_ROOT1)
         }
 
     def _create_sysfs(self, path_ch0, path_parent, i2c_mux):
@@ -135,6 +155,13 @@ class I2CMux:
                 with open(path_parent + "/new_device", 'w') as f:
                     self.logger.info(i2c_mux.NAME + " " + hex(i2c_mux.address))
                     f.write(i2c_mux.NAME + " " + hex(i2c_mux.address))
+                # By default the pca954x driver doesn't deselect the
+                # mux at the end of transactions making it unsafe with
+                # multiple muxes in the system. Work around that by
+                # telling it to deselect after each transaction for
+                # each channel, which is defined by the value -2.
+                with open(path_ch0 + "/mux_device/idle_state", 'w') as f:
+                    f.write("-2")
                 self.logger.info("Register " + i2c_mux.name + " in sysfs")
         except Exception as e:
             self.logger.error("Register MUX " + i2c_mux.name + " to sysfs fail, error: ", str(e))
@@ -193,6 +220,14 @@ class I2CMux:
                                self.MUXs["9546_QSFP"])
         except Exception as e:
             self.logger.error("Create MUX 9546 QSFP fail, error: ", str(e))
+            raise
+
+        try:
+            self._create_sysfs(self.PATH_MUX_9546_ROOT1_CHAN0,
+                               self.PATH_MUX_9546_ROOT1_PARENT,
+                               self.MUXs["9546_ROOT1"])
+        except Exception as e:
+            self.logger.error("Create MUX 9546 ROOT1 fail, error: ", str(e))
             raise
 
     def deinit(self):

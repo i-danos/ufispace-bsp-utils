@@ -75,6 +75,10 @@ class PlatformUtility:
             # I2C Dev
             subprocess.run(['modprobe', 'i2c_dev'])
 
+            # I2C Mux
+            subprocess.run(['modprobe', 'i2c_mux_pca954x'])
+            self.i2c_mux.init()
+
             # EEPROM
             self.eeprom.init()
 

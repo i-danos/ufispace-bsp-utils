@@ -17,6 +17,7 @@
 ###########################################################################
 import os
 import sys
+from time import sleep
 
 from common.logger import Logger
 from i2c_mux.i2c_mux import I2CMux
@@ -128,14 +129,48 @@ class EEPRom:
     QSFP_EEPROM_SIZE = 256
     QSFP_EEPROM_PAGE_SIZE = 0x10
     QSFP_EEPROM_PAGE_MASK = SFP_EEPROM_PAGE_SIZE - 1
-    
+
+    QSFP_EEPROM_TX_DISABLE = 0x56
+    QSFP_EEPROM_TX_DISABLE_MASK = 0x0F
+    QSFP_EEPROM_TX_ENABLE_MASK = 0x00
+    QSFP_EEPROM_PAGE_SELECT = 0x7F
+    QSFP_EEPROM_UPPER_PAGE_00 = 0x0
+    QSFP_EEPROM_UPPER_PAGE_01 = 0x1
+    QSFP_EEPROM_UPPER_PAGE_02 = 0x2
+    QSFP_EEPROM_UPPER_PAGE_03 = 0x3
+    QSFP_EEPROM_LOWER_PAGE_SIZE = 128
+
     def __init__(self):
         log = Logger(__name__)
         self.logger = log.getLogger()
-        self.i2c_mux = I2CMux()
+        self.i2c_mux = I2CMux().MUXs
         self.ioexp = IOExpander()
         self.cpld = CPLD()
         
+    def set_tx_laser(self, port_num, enable, sub_port=None):
+        i2c_address = self.I2C_ADDR_EEPROM_SFP_A0
+        mask = 0
+
+        bus = self.get_qsfp_bus(port_num)
+
+        try:
+            if sub_port == None:
+                if enable:
+                    mask = self.QSFP_EEPROM_TX_ENABLE_MASK
+                else:
+                    mask = self.QSFP_EEPROM_TX_DISABLE_MASK
+            else:
+                mask = bus.read_byte_data(i2c_address,
+                                          self.QSFP_EEPROM_TX_DISABLE)
+                if enable:
+                    mask &= ~(1 << sub_port)
+                else:
+                    mask |= (1 << sub_port)
+
+            bus.write_byte_data(i2c_address, self.QSFP_EEPROM_TX_DISABLE, mask)
+        finally:
+            bus.close()
+
     def _data_transfer(self, _len, _type, _data):
         
         output = ""
@@ -153,42 +188,98 @@ class EEPRom:
         return output
 
     def _get_sfp_mux_channel(self, port_num):
-        ch = port_num % 8
         # Normal channel conversion
-        chanl = 0x1 << ch
-
-        return chanl
+        return port_num % 8
         
     def _get_qsfp_mux_channel(self, port_num):
         ch = port_num % 8
         # Customize channel
         if ch == 0:
-            chanl = 0x08
+            chanl = 3
         elif ch == 1:
-            chanl = 0x04
+            chanl = 2
         else:
-            chanl = 0x0
+            chanl = 0
 
         return chanl
             
-    def _get_sfp_mux_addr(self, port_num):
+    def _get_sfp_mux(self, port_num):
         port_grp = int(port_num / 8)
 
         if port_grp == 0:      # P0~P7
-            mux = self.I2C_ADDR_SFP_MUX_9548_1
+            mux = "9548_SFP1"
         elif port_grp == 1:    # P8~P15
-            mux = self.I2C_ADDR_SFP_MUX_9548_2
+            mux = "9548_SFP2"
         elif port_grp == 2:    # P16~P23
-            mux = self.I2C_ADDR_SFP_MUX_9548_3
+            mux = "9548_SFP3"
         else:                  # P24~P27
-            mux = self.I2C_ADDR_SFP_MUX_9548_4
+            mux = "9548_SFP4"
 
         return mux
 
     def init(self):
         pass
 
+    def _get_sfp_qsfp_bus(self, mux, channel):
+        if self.i2c_mux[mux].ch_bus != None:
+            bus_num = self.i2c_mux[mux].ch_bus[channel]
+            return SMBus(bus_num)
+        else:
+            bus = SMBus(0)
+            bus.write_byte_data(self.I2C_ADDR_MUX_9546, 0x0, self.SFP_QSFP_CHANEL)
+            if mux == "9548_SFP1":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_1
+            elif mux == "9548_SFP2":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_2
+            elif mux == "9548_SFP3":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_3
+            elif mux == "9548_SFP4":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_4
+            else: # "9546_QSFP"
+                mux_addr = self.I2C_ADDR_QSFP_MUX_9546
+            bus.write_byte_data(mux_addr, 0x0, 1 << channel)
+            return bus
+
+    def _close_sfp_qsfp_bus(self, bus, mux):
+        if self.i2c_mux[mux].ch_bus is None:
+            if mux == "9548_SFP1":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_1
+            elif mux == "9548_SFP2":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_2
+            elif mux == "9548_SFP3":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_3
+            elif mux == "9548_SFP4":
+                mux_addr = self.I2C_ADDR_SFP_MUX_9548_4
+            else: # "9546_QSFP"
+                mux_addr = self.I2C_ADDR_QSFP_MUX_9546
+            bus.write_byte_data(mux_addr, 0x0, 0x0)
+            bus.write_byte_data(self.I2C_ADDR_MUX_9546, 0x0, 0x0)
+        bus.close()
+
+    def get_sfp_bus(self, port_num):
+        mux = self._get_sfp_mux(port_num)
+        mux_chanl = self._get_sfp_mux_channel(port_num)
+
+        return self._get_sfp_qsfp_bus(mux, mux_chanl)
+
+    def close_sfp_bus(self, port_num, bus):
+        mux = self._get_sfp_mux(port_num)
+
+        self._close_sfp_qsfp_bus(bus, mux)
+
+    def get_qsfp_bus(self, port_num):
+        mux = "9546_QSFP"
+        mux_chanl = self._get_qsfp_mux_channel(port_num)
+
+        return self._get_sfp_qsfp_bus(mux, mux_chanl)
+
+    def close_qsfp_bus(self, port_num, bus):
+        mux = "9546_QSFP"
+
+        self._close_sfp_qsfp_bus(bus, mux)
+
     def dump_cpu_eeprom(self):
+        bus = None
         try:
             # Get the bus number of sysfs
             bus_num = self.I2C_BUS_CPU_EEPROM
@@ -229,41 +320,27 @@ class EEPRom:
                 bus.close()
 
     def dump_sfp_eeprom(self, port_num, page = None):
+        bus = None
         try:
-            bus = SMBus(0)
-
             if page == None or page == "A0":
                 i2c_address = self.I2C_ADDR_EEPROM_SFP_A0
             elif page == "A2":
                 i2c_address = self.I2C_ADDR_EEPROM_SFP_A2
             
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_MUX_9546, 0x0, self.SFP_QSFP_CHANEL)
-                        
-            # Enable the channel by port location
-            mux_addr = self._get_sfp_mux_addr(port_num)
-            mux_chanl = self._get_sfp_mux_channel(port_num)
-            bus.write_byte_data(mux_addr, 0x0, mux_chanl)
+            bus = self.get_sfp_bus(port_num)
 
             offset = 0
             data = []
             
-            # Clean the eeprom internal counter
-            bus.write_byte(i2c_address, 0x0)
-            
             while offset < self.SFP_EEPROM_SIZE:
                 blk_off = offset & self.SFP_EEPROM_PAGE_MASK
                 _len = self.SFP_EEPROM_SIZE - offset
-                maxlen = self.SFP_EEPROM_PAGE_SIZE - (blk_off & self.SFP_EEPROM_PAGE_MASK)
-                if _len > maxlen:
-                    _len = maxlen
 
-                for i in range(_len):
-                    res = bus.read_byte(i2c_address)
-                    data.append(res)
+                new_data = bus.read_i2c_block_data(i2c_address, offset, _len)
+                data.extend(new_data[:_len] if _len < len(new_data) else new_data)
 
-                offset = offset + _len    
-                
+                offset += len(new_data)
+
             data_base = 0
             content = {}
             for j in range(len(DATA_INFO.SFP["list"])):
@@ -309,70 +386,39 @@ class EEPRom:
                 self.logger.warning("I2C bus is normal")
             raise
         finally:         
-            # Disable the channel by port location
-            bus.write_byte_data(mux_addr, 0x0, 0x0)
-            
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_MUX_9546, 0x0, 0x0)
-            
             if bus != None:
-                bus.close()
+                self.close_sfp_bus(port_num, bus)
 
     def dump_qsfp_eeprom(self, port_num, page = None):
+        bus = None
         try:
-            bus = SMBus(0)
+            i2c_address = self.I2C_ADDR_EEPROM_QSFP_A0
+            bus = self.get_qsfp_bus(port_num)
 
-            if page == None or page == "A0":
-                i2c_address = self.I2C_ADDR_EEPROM_QSFP_A0
-            elif page == "A2":
-                i2c_address = self.I2C_ADDR_EEPROM_QSFP_A2
-            
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_MUX_9546, 0x0, self.SFP_QSFP_CHANEL)
-                        
-            # Enable the channel by port location
-            mux_addr = self.I2C_ADDR_QSFP_MUX_9546
-            mux_chanl = self._get_qsfp_mux_channel(port_num)
-            bus.write_byte_data(mux_addr, 0x0, mux_chanl)
-               
             offset = 0
             data = []
             
-            # Clean the eeprom internal counter 
-            bus.write_byte(i2c_address, 0x0)
-            
+            # Write page selection to page select byte
+            if page == 0:
+                bus.write_byte_data(i2c_address, self.QSFP_EEPROM_PAGE_SELECT, self.QSFP_EEPROM_UPPER_PAGE_00)
+            elif page == 1:
+                bus.write_byte_data(i2c_address, self.QSFP_EEPROM_PAGE_SELECT, self.QSFP_EEPROM_UPPER_PAGE_01)
+                offset = self.QSFP_EEPROM_LOWER_PAGE_SIZE
+            elif page == 2:
+                bus.write_byte_data(i2c_address, self.QSFP_EEPROM_PAGE_SELECT, self.QSFP_EEPROM_UPPER_PAGE_02)
+                offset = self.QSFP_EEPROM_LOWER_PAGE_SIZE
+            elif page == 3:
+                bus.write_byte_data(i2c_address, self.QSFP_EEPROM_PAGE_SELECT, self.QSFP_EEPROM_UPPER_PAGE_03)
+                offset = self.QSFP_EEPROM_LOWER_PAGE_SIZE
+
             while offset < self.QSFP_EEPROM_SIZE:
                 blk_off = offset & self.QSFP_EEPROM_PAGE_MASK
                 _len = self.QSFP_EEPROM_SIZE - offset
-                maxlen = self.QSFP_EEPROM_PAGE_SIZE - (blk_off & self.QSFP_EEPROM_PAGE_MASK)
-                if _len > maxlen:
-                    _len = maxlen
 
-                for i in range(_len):
-                    res = bus.read_byte(i2c_address)
-                    data.append(res)
+                new_data = bus.read_i2c_block_data(i2c_address, offset)
+                data.extend(new_data[:_len] if _len < len(new_data) else new_data)
 
-                offset = offset + _len
-            
-            data_base = 0
-            content = {}
-            for j in range(len(DATA_INFO.QSFP["list"])):
-                
-                data_str = []
-                data_len = DATA_INFO.QSFP["list"][j][1]
-                data_type = DATA_INFO.QSFP["list"][j][2]
-                for k in range(data_len):
-                    data_str.append(data[data_base+k])
-                
-                if ("Low_Memory" not in DATA_INFO.QSFP["list"][j][0]) and \
-                   ("Page_Sel" not in DATA_INFO.QSFP["list"][j][0]) and \
-                   ("Vendor_Specific" not in DATA_INFO.QSFP["list"][j][0]) and \
-                   ("dev_tech" not in DATA_INFO.QSFP["list"][j][0]) and \
-                   ("Ext_Transceiver" not in DATA_INFO.QSFP["list"][j][0]) and \
-                   ("Max_case_temp" not in DATA_INFO.QSFP["list"][j][0]):                    
-                   content.update({DATA_INFO.QSFP["list"][j][0]: self._data_transfer(data_len, data_type, data_str)})
-            
-                data_base = data_base + data_len
+                offset += len(new_data)
 
             return data
         except Exception as e:
@@ -404,11 +450,5 @@ class EEPRom:
                 self.logger.warning("I2C bus is normal")
             raise
         finally:
-            # Disable the channel by port location
-            bus.write_byte_data(mux_addr, 0x0, 0x0)
-            
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_MUX_9546, 0x0, 0x0)
-            
             if bus != None:
-                bus.close()
+                self.close_qsfp_bus(port_num, bus)

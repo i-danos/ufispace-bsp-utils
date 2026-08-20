@@ -18,7 +18,7 @@
 from setuptools import setup
 from distutils.core import setup
 setup(name='SIAD_BSP_UTIL',
-      version='PKG_VER',
+      version='3.0.13',
       packages=['','timing','common','const','cpld','eeprom','gpio','i2c_mux','protocol','timing.ubx'],
-      install_requires=['pyusb', 'portio']
+      install_requires=['pyusb', 'portio', 'smbus', 'serial']
       )

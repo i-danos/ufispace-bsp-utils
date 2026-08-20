@@ -21,15 +21,42 @@ import time
 
 from common.logger import Logger
 from smbus import SMBus
+from i2c_mux.i2c_mux import I2CMux
 
 class PCA953x:
+    I2C_ADDR_9546_ROOT = 0x76
+    I2C_ADDR_9546_ROOT1 = 0x75
 
-    def __init__(self, dev_info, bus_num):
+    def __init__(self, dev_info, i2c_mux):
         self.name = dev_info["name"]
         self.address = dev_info["address"]
-        self.bus_num = bus_num
         self.pins = dev_info["pins"]
         self.init_cfg = dev_info["init_cfg"]
+        self.i2c_mux = i2c_mux.MUXs
+        self.parent = dev_info["parent"]
+
+    def get_channel_bus(self, channel):
+        if self.parent is None:
+            return SMBus(0)
+        else:
+            if self.i2c_mux[self.parent].ch_bus != None:
+                bus_num = self.i2c_mux[self.parent].ch_bus[channel]
+                return SMBus(bus_num)
+            else:
+                bus = SMBus(0)
+                if self.parent == "9546_ROOT":
+                    bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 1 << channel)
+                else:
+                    bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, 1 << channel)
+                return bus
+
+    def close_channel_bus(self, bus):
+        if not self.parent is None and self.i2c_mux[self.parent].ch_bus is None:
+            if self.parent == "9546_ROOT":
+                bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)
+            else:
+                bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, 0x0)
+        bus.close()
 
 class PCA9535(PCA953x):
 
@@ -52,9 +79,6 @@ class PCA9539(PCA953x):
 
 class IOExpander:
     
-    I2C_ADDR_9546_ROOT = 0x76
-    I2C_ADDR_9546_ROOT1 = 0x75
-
     I2C_ADDR_TPS53667 = 0x61
     ROV_List = ['N/A' , '1.00' , '0.95' , 'N/A' , '1.04']
     TPS53667_voltage = [
@@ -101,7 +125,7 @@ class IOExpander:
             "config_0": 0xff, "config_1": 0xff, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xff
         },
         "9535_SFP1": {
-            "name": "pca9535_TX_DIS_1", "address": 0x22, "parent": "9546_ROOT", "channel": 0x1, "pins": 16,
+            "name": "pca9535_TX_DIS_1", "address": 0x22, "parent": "9546_ROOT", "channel": 0, "pins": 16,
             "port_idx": {
                 "0": 8, "1": 9, "2": 10, "3": 11, "4": 12, "5": 13, "6": 14,
                 "7": 15, "8": 0, "9": 1, "10": 2, "11": 3, "12": 4, "13": 5,
@@ -128,7 +152,7 @@ class IOExpander:
             "config_0": 0x0, "config_1": 0x0, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0x0, "output_port_1": 0x0 
         },
         "9535_SFP2": {
-            "name": "pca9535_TX_DIS_2", "address": 0x24, "parent": "9546_ROOT", "channel": 0x1, "pins": 16,
+            "name": "pca9535_TX_DIS_2", "address": 0x24, "parent": "9546_ROOT", "channel": 0, "pins": 16,
             "port_idx": {
                 "24": 0, "25": 1, "26": 2, "27": 3, "16": 8, "17": 9, "18": 10,
                 "19": 11, "20": 12, "21": 13, "22": 14, "23": 15
@@ -154,7 +178,7 @@ class IOExpander:
             "config_0": 0x0, "config_1": 0x0, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0x0, "output_port_1": 0x0
         },
         "9535_QSFP": {
-            "name": "pca9535_QSFP", "address": 0x21, "parent": "9546_ROOT", "channel": 0x1, "pins": 16,
+            "name": "pca9535_QSFP", "address": 0x21, "parent": "9546_ROOT", "channel": 0, "pins": 16,
             "init_cfg": [
                 {"gpio": GPIO_BASE-48, "direction": "out", "value": 0},  # gpio463 IO_1.7 NI
                 {"gpio": GPIO_BASE-49, "direction": "out", "value": 0},  # gpio462 IO_1.6 NI
@@ -176,7 +200,7 @@ class IOExpander:
             "config_0": 0x33, "config_1": 0x00, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0x0, "output_port_1": 0x30
         },
         "9535_SFP3": {
-            "name": "pca9535_TX_FLT_1", "address": 0x26, "parent": "9546_ROOT", "channel": 0x2, "pins": 16,
+            "name": "pca9535_TX_FLT_1", "address": 0x26, "parent": "9546_ROOT", "channel": 1, "pins": 16,
             "port_idx": {
                 "0": 8, "1": 9, "2": 10, "3": 11, "4": 12, "5": 13, "6": 14,
                 "7": 15, "8": 0, "9": 1, "10": 2, "11": 3, "12": 4, "13": 5,
@@ -203,7 +227,7 @@ class IOExpander:
             "config_0": 0xff, "config_1": 0xff, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xff
         },
         "9535_SFP4": {
-            "name": "pca9535_TX_FLT_2", "address": 0x27, "parent": "9546_ROOT", "channel": 0x2, "pins": 16,
+            "name": "pca9535_TX_FLT_2", "address": 0x27, "parent": "9546_ROOT", "channel": 1, "pins": 16,
             "port_idx": {
                 "24": 0, "25": 1, "26": 2, "27": 3, "16": 8, "17": 9, "18": 10,
                 "19": 11, "20": 12, "21": 13, "22": 14, "23": 15
@@ -229,7 +253,7 @@ class IOExpander:
             "config_0": 0xff, "config_1": 0xf0, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xf0
         },
         "9535_SFP5": {
-            "name": "pca9535_RATE_SEL_1", "address": 0x25, "parent": "9546_ROOT", "channel": 0x2, "pins": 16,
+            "name": "pca9535_RATE_SEL_1", "address": 0x25, "parent": "9546_ROOT", "channel": 1, "pins": 16,
             "port_idx": {
                 "0": 8, "1": 9, "2": 10, "3": 11, "4": 12, "5": 13, "6": 14,
                 "7": 15, "8": 0, "9": 1, "10": 2, "11": 3, "12": 4, "13": 5,
@@ -256,7 +280,7 @@ class IOExpander:
             "config_0": 0x0, "config_1": 0x0, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xff
         },
         "9535_SFP6": {
-            "name": "pca9535_RATE_SEL_2", "address": 0x23, "parent": "9546_ROOT", "channel": 0x2, "pins": 16,
+            "name": "pca9535_RATE_SEL_2", "address": 0x23, "parent": "9546_ROOT", "channel": 1, "pins": 16,
             "port_idx": {
                 "24": 0, "25": 1, "26": 2, "27": 3, "16": 8, "17": 9, "18": 10,
                 "19": 11, "20": 12, "21": 13, "22": 14, "23": 15
@@ -282,7 +306,7 @@ class IOExpander:
             "config_0": 0x0, "config_1": 0x0, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xff
         },
         "9535_SFP7": {
-            "name": "pca9535_ABS_1", "address": 0x20, "parent": "9546_ROOT", "channel": 0x4, "pins": 16,
+            "name": "pca9535_ABS_1", "address": 0x20, "parent": "9546_ROOT", "channel": 2, "pins": 16,
             "port_idx": {
                 "0": 8, "1": 9, "2": 10, "3": 11, "4": 12, "5": 13, "6": 14,
                 "7": 15, "8": 0, "9": 1, "10": 2, "11": 3, "12": 4, "13": 5,
@@ -309,7 +333,7 @@ class IOExpander:
             "config_0": 0xff, "config_1": 0xff, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xff
         },
         "9535_SFP8": {
-            "name": "pca9535_ABS_2", "address": 0x22, "parent": "9546_ROOT", "channel": 0x4, "pins": 16,
+            "name": "pca9535_ABS_2", "address": 0x22, "parent": "9546_ROOT", "channel": 2, "pins": 16,
             "port_idx": {
                 "24": 0, "25": 1, "26": 2, "27": 3, "16": 8, "17": 9, "18": 10,
                 "19": 11, "20": 12, "21": 13, "22": 14, "23": 15
@@ -335,7 +359,7 @@ class IOExpander:
             "config_0": 0xff, "config_1": 0xf0, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xf0
         },
         "9535_SFP9": {
-            "name": "pca9535_RX_LOS_1", "address": 0x21, "parent": "9546_ROOT", "channel": 0x4, "pins": 16,
+            "name": "pca9535_RX_LOS_1", "address": 0x21, "parent": "9546_ROOT", "channel": 2, "pins": 16,
             "port_idx": {
                 "0": 8, "1": 9, "2": 10, "3": 11, "4": 12, "5": 13, "6": 14,
                 "7": 15, "8": 0, "9": 1, "10": 2, "11": 3, "12": 4, "13": 5,
@@ -362,7 +386,7 @@ class IOExpander:
             "config_0": 0xff, "config_1": 0xff, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xff
         },
         "9535_SFP10": {
-            "name": "pca9535_RX_LOS_2", "address": 0x24, "parent": "9546_ROOT", "channel": 0x4, "pins": 16,
+            "name": "pca9535_RX_LOS_2", "address": 0x24, "parent": "9546_ROOT", "channel": 2, "pins": 16,
             "port_idx": {
                 "24": 0, "25": 1, "26": 2, "27": 3, "16": 8, "17": 9, "18": 10,
                 "19": 11, "20": 12, "21": 13, "22": 14, "23": 15
@@ -388,7 +412,7 @@ class IOExpander:
             "config_0": 0xff, "config_1": 0xf0, "polarity_inv_0": 0x0, "polarity_inv_1": 0x0, "output_port_0": 0xff, "output_port_1": 0xf0
         },
         "9535_BRD": {
-            "name": "pca9535_brd_id", "address": 0x20, "parent": "9546_ROOT1", "channel": 0x4, "pins": 16,
+            "name": "pca9535_brd_id", "address": 0x20, "parent": "9546_ROOT1", "channel": 2, "pins": 16,
             "port_idx": {
                 "24": 0, "25": 1, "26": 2, "27": 3, "16": 8, "17": 9, "18": 10,
                 "19": 11, "20": 12, "21": 13, "22": 14, "23": 15
@@ -423,6 +447,14 @@ class IOExpander:
         self.logger = log.getLogger()
         self.IOExpanders = self.SIAD_IOExpanders
         self.ordered_ioexps = self.SIAD_IOExpanders_Order_List
+        self.i2c_mux = I2CMux()
+
+        for ioexp_name in self.ordered_ioexps:
+            if ioexp_name == "9539_CPU":
+                ioexp = PCA9539(self.IOExpanders[ioexp_name], self.i2c_mux)
+            else:
+                ioexp = PCA9535(self.IOExpanders[ioexp_name], self.i2c_mux)
+            self.IOExpanders[ioexp_name]["ioexp"] = ioexp
 
     def _create_sysfs(self, path_parent, ioexp):
         try:
@@ -558,21 +590,11 @@ class IOExpander:
         # Create sysfs, export gpio and initial gpio
         for ioexp_name in self.ordered_ioexps:
             try:
-                bus = SMBus(0)
-
                 dev_addr = self.IOExpanders[ioexp_name]["address"]
+                mux_chanl = self.IOExpanders[ioexp_name]["channel"]
+                ioexp = self.IOExpanders[ioexp_name]["ioexp"]
 
-                if self.IOExpanders[ioexp_name]["parent"] is None:
-                    mux_chanl = 0x0
-                else:
-                    if self.IOExpanders[ioexp_name]["parent"] == "9546_ROOT":
-                        mux_chanl = self.IOExpanders[ioexp_name]["channel"]
-                        # Enable the channel of PCA9548
-                        bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
-                    else:
-                        mux_chanl = self.IOExpanders[ioexp_name]["channel"]
-                        # Enable the channel of PCA9548
-                        bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, mux_chanl)
+                bus = ioexp.get_channel_bus(mux_chanl)
 
                 # Set commnad config 0 & 1
                 bus.write_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_CONF, self.IOExpanders[ioexp_name]["config_0"])
@@ -614,16 +636,8 @@ class IOExpander:
             except Exception as e:
                 raise
             finally:
-                if self.IOExpanders[ioexp_name]["parent"] is not None:
-                    if self.IOExpanders[ioexp_name]["parent"] == "9546_ROOT":
-                        # Disable the channel of PCA9548
-                        bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)
-                    else:
-                        # Disable the channel of PCA9548
-                        bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, 0x0)
-            
                 if bus != None:
-                    bus.close()
+                    ioexp.close_channel_bus(bus)
 
     def deinit(self):
         try:
@@ -633,12 +647,10 @@ class IOExpander:
 
     def qsfp_get_presence(self, port_num):
         try:
-            bus = SMBus(0)
-            
-            dev_addr = self.IOExpanders["9535_QSFP"]["address"]
             mux_chanl = self.IOExpanders["9535_QSFP"]["channel"]
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            dev_addr = self.IOExpanders["9535_QSFP"]["address"]
+            ioexp = self.IOExpanders["9535_QSFP"]["ioexp"]
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_IN)
@@ -654,21 +666,15 @@ class IOExpander:
             raise
             
         finally:
-            if self.IOExpanders["9535_QSFP"]["parent"] is not None:
-                # Disable the channel of PCA9548
-                bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def qsfp_set_lp_mode(self, port_num, cfg):
         try:
-            bus = SMBus(0)
-            
             dev_addr = self.IOExpanders["9535_QSFP"]["address"]
             mux_chanl = self.IOExpanders["9535_QSFP"]["channel"]
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            ioexp = self.IOExpanders["9535_QSFP"]["ioexp"]
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT1_OUT)
@@ -692,21 +698,15 @@ class IOExpander:
             raise
             
         finally:
-            if self.IOExpanders["9535_QSFP"]["parent"] is not None:
-                # Disable the channel of PCA9548
-                bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def qsfp_get_lp_mode(self, port_num):
         try:
-            bus = SMBus(0)
-            
             dev_addr = self.IOExpanders["9535_QSFP"]["address"]
             mux_chanl = self.IOExpanders["9535_QSFP"]["channel"]
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            ioexp = self.IOExpanders["9535_QSFP"]["ioexp"]
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT1_OUT)
@@ -722,21 +722,15 @@ class IOExpander:
             raise
             
         finally:
-            if self.IOExpanders["9535_QSFP"]["parent"] is not None:
-                # Disable the channel of PCA9548
-                bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def qsfp_reset_port(self, port_num):
         try:
-            bus = SMBus(0)
-            
             dev_addr = self.IOExpanders["9535_QSFP"]["address"]
             mux_chanl = self.IOExpanders["9535_QSFP"]["channel"]
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            ioexp = self.IOExpanders["9535_QSFP"]["ioexp"]
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             ori_data = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT1_OUT)
@@ -756,26 +750,21 @@ class IOExpander:
             raise
             
         finally:
-            if self.IOExpanders["9535_QSFP"]["parent"] is not None:
-                # Disable the channel of PCA9548
-                bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def sfp_get_presence(self, port_num):
         try:
-            bus = SMBus(0)
-            
             if port_num <= 15:
                 dev_addr = self.IOExpanders["9535_SFP7"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP7"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP7"]["ioexp"]
             else:
                 dev_addr = self.IOExpanders["9535_SFP8"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP8"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP8"]["ioexp"]
 
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data0 = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_IN)
@@ -783,9 +772,9 @@ class IOExpander:
 
             if port_num <= 7:
                 return ((data0 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 8 and port_num <= 15:
+            elif port_num >= 8 and port_num <= 15:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 16 and port_num <= 23: 
+            elif port_num >= 16 and port_num <= 23: 
                 return ((data0>> 7-(port_num%8)) & 0x1)
             else:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
@@ -794,25 +783,21 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def sfp_get_rx_lost(self, port_num):
         try:
-            bus = SMBus(0)
-            
             if port_num <= 15:
                 dev_addr = self.IOExpanders["9535_SFP9"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP9"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP9"]["ioexp"]
             else:
                 dev_addr = self.IOExpanders["9535_SFP10"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP10"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP10"]["ioexp"]
 
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data0 = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_IN)
@@ -820,9 +805,9 @@ class IOExpander:
 
             if port_num <= 7:
                 return ((data0 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 8 and port_num <= 15:
+            elif port_num >= 8 and port_num <= 15:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 16 and port_num <= 23: 
+            elif port_num >= 16 and port_num <= 23: 
                 return ((data0 >> 7-(port_num%8)) & 0x1)
             else:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
@@ -831,25 +816,21 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def sfp_get_tx_flt(self, port_num):
         try:
-            bus = SMBus(0)
-            
             if port_num <= 15:
                 dev_addr = self.IOExpanders["9535_SFP3"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP3"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP3"]["ioexp"]
             else:
                 dev_addr = self.IOExpanders["9535_SFP4"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP4"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP4"]["ioexp"]
 
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data0 = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_IN)
@@ -857,9 +838,9 @@ class IOExpander:
 
             if port_num <= 7:
                 return ((data0 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 8 and port_num <= 15:
+            elif port_num >= 8 and port_num <= 15:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 16 and port_num <= 23: 
+            elif port_num >= 16 and port_num <= 23: 
                 return ((data0 >> 7-(port_num%8)) & 0x1)
             else:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
@@ -868,25 +849,21 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def sfp_set_port_rate(self, port_num, cfg):
         try:
-            bus = SMBus(0)
-            
             if port_num <= 15:
                 dev_addr = self.IOExpanders["9535_SFP5"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP5"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP5"]["ioexp"]
             else:
                 dev_addr = self.IOExpanders["9535_SFP6"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP6"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP6"]["ioexp"]
 
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data0 = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_OUT)
@@ -899,13 +876,13 @@ class IOExpander:
                 else:
                     data = (0x1 << 7-(port_num%8)) | data0
                 pca9535_cmd = PCA9535_CMD.PCA9535_REG_PORT0_OUT
-            elif port_num > 8 and port_num <= 15:
+            elif port_num >= 8 and port_num <= 15:
                 if cfg == 0:
                     data = ((0x1 << 7-(port_num%8)) ^ 0xff) & data1
                 else:
                     data = (0x1 << 7-(port_num%8)) | data1
                 pca9535_cmd = PCA9535_CMD.PCA9535_REG_PORT1_OUT
-            elif port_num > 16 and port_num <= 23: 
+            elif port_num >= 16 and port_num <= 23: 
                 if cfg == 0:
                     data = ((0x1 << 7-(port_num%8)) ^ 0xff) & data0
                 else:
@@ -925,25 +902,21 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def sfp_get_port_rate(self, port_num):
         try:
-            bus = SMBus(0)
-            
             if port_num <= 15:
                 dev_addr = self.IOExpanders["9535_SFP5"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP5"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP5"]["ioexp"]
             else:
                 dev_addr = self.IOExpanders["9535_SFP6"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP6"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP6"]["ioexp"]
 
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data0 = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_OUT)
@@ -951,9 +924,9 @@ class IOExpander:
 
             if port_num <= 7:
                 return ((data0 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 8 and port_num <= 15:
+            elif port_num >= 8 and port_num <= 15:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 16 and port_num <= 23: 
+            elif port_num >= 16 and port_num <= 23: 
                 return ((data0 >> 7-(port_num%8)) & 0x1)
             else:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
@@ -962,11 +935,8 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
                 
     def sfp_set_port_status(self, port_num, cfg):
         try:
@@ -975,12 +945,13 @@ class IOExpander:
             if port_num <= 15:
                 dev_addr = self.IOExpanders["9535_SFP1"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP1"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP1"]["ioexp"]
             else:
                 dev_addr = self.IOExpanders["9535_SFP2"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP2"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP2"]["ioexp"]
 
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data0 = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_OUT)
@@ -993,13 +964,13 @@ class IOExpander:
                 else:
                     data = (0x1 << 7-(port_num%8)) | data0
                 pca9535_cmd = PCA9535_CMD.PCA9535_REG_PORT0_OUT
-            elif port_num > 8 and port_num <= 15:
+            elif port_num >= 8 and port_num <= 15:
                 if cfg == 0:
                     data = ((0x1 << 7-(port_num%8)) ^ 0xff) & data1
                 else:
                     data = (0x1 << 7-(port_num%8)) | data1
                 pca9535_cmd = PCA9535_CMD.PCA9535_REG_PORT1_OUT
-            elif port_num > 16 and port_num <= 23: 
+            elif port_num >= 16 and port_num <= 23: 
                 if cfg == 0:
                     data = ((0x1 << 7-(port_num%8)) ^ 0xff) & data0
                 else:
@@ -1019,25 +990,21 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
                
     def sfp_get_port_status(self, port_num):
         try:
-            bus = SMBus(0)
-            
             if port_num <= 15:
                 dev_addr = self.IOExpanders["9535_SFP1"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP1"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP1"]["ioexp"]
             else:
                 dev_addr = self.IOExpanders["9535_SFP2"]["address"]
                 mux_chanl = self.IOExpanders["9535_SFP2"]["channel"]
+                ioexp = self.IOExpanders["9535_SFP2"]["ioexp"]
 
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, mux_chanl)
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data0 = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_OUT)
@@ -1045,9 +1012,9 @@ class IOExpander:
 
             if port_num <= 7:
                 return ((data0 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 8 and port_num <= 15:
+            elif port_num >= 8 and port_num <= 15:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
-            elif port_num > 16 and port_num <= 23: 
+            elif port_num >= 16 and port_num <= 23: 
                 return ((data0 >> 7-(port_num%8)) & 0x1)
             else:
                 return ((data1 >> 7-(port_num%8)) & 0x1)
@@ -1056,21 +1023,16 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
                 
     def bmc_reset_set(self, input_target):
         try:
-            bus = SMBus(0)
-            
             dev_addr = self.IOExpanders["9535_BRD"]["address"]
             mux_chanl = self.IOExpanders["9535_BRD"]["channel"]
-            
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, mux_chanl)
+            ioexp = self.IOExpanders["9535_BRD"]["ioexp"]
+
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_OUT)
@@ -1103,22 +1065,17 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
     
     def rov_get_voltage(self):
         try:
-            bus = SMBus(0)
-            
             dev_addr = self.IOExpanders["9535_BRD"]["address"]
             mux_chanl = self.IOExpanders["9535_BRD"]["channel"]
-            
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, mux_chanl)
-            
+            ioexp = self.IOExpanders["9535_BRD"]["ioexp"]
+
+            bus = ioexp.get_channel_bus(mux_chanl)
+
             # Get data
             data = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_IN)
                 
@@ -1136,22 +1093,17 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
 
     def rov_set_voltage(self, rov):
         try:
-            bus = SMBus(0)
-            
             dev_addr = self.IOExpanders["9535_BRD"]["address"]
             mux_chanl = self.IOExpanders["9535_BRD"]["channel"]
-            
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, mux_chanl)
-            
+            ioexp = self.IOExpanders["9535_BRD"]["ioexp"]
+
+            bus = ioexp.get_channel_bus(mux_chanl)
+
             # Set voltage
             setok = 0
             for element in self.TPS53667_voltage:
@@ -1169,11 +1121,8 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close()
+                ioexp.close_channel_bus(bus)
             
     def bmc_reset_unset(self, input_target):
         try:
@@ -1181,9 +1130,9 @@ class IOExpander:
             
             dev_addr = self.IOExpanders["9535_BRD"]["address"]
             mux_chanl = self.IOExpanders["9535_BRD"]["channel"]
-            
-            # Enable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, mux_chanl)
+            ioexp = self.IOExpanders["9535_BRD"]["ioexp"]
+
+            bus = ioexp.get_channel_bus(mux_chanl)
             
             # Get data
             data = bus.read_byte_data(dev_addr, PCA9535_CMD.PCA9535_REG_PORT0_OUT)
@@ -1216,8 +1165,5 @@ class IOExpander:
             raise
             
         finally:
-            # Disable the channel of PCA9548
-            bus.write_byte_data(self.I2C_ADDR_9546_ROOT1, 0x0, 0x0)   
-                     
             if bus != None:
-                bus.close() 
+                ioexp.close_channel_bus(bus)
