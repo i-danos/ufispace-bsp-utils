@@ -1,0 +1,78 @@
+#! /usr/bin/python3
+# -*- coding: utf-8 -*-
+# Copyright (c) 2019 AT&T Intellectual Property.  All rights reserved.
+#
+# SPDX-License-Identifier: LGPL-2.1-only
+
+
+import sys
+import subprocess
+from CPLD_utility import CPLDUtility
+from const.const import Led
+
+def set_led(name, status, colour, blink):
+
+    cpld_util = CPLDUtility()
+    try:
+        cpld_util.set_led_control(name, status,
+            colour, blink)
+    except CPLDError as e:
+        print("Error: " + str(e))
+        sys.exit(-1)
+
+if __name__ == "__main__":
+    usage_string = """
+        Usage ufi-stat-led-control <led name> <led status> <led colour> <blink status>
+        led name = sys|pow|fan|gps|syn
+        led status = on|off
+        led colour = yellow|green
+        link status = solid|blink
+    """
+    if len(sys.argv) != 5:
+        print(usage_string)
+        sys.exit(-1)
+
+    name, status, colour, blink = "", "", "", ""
+    if sys.argv[1] == "sys":
+        name = Led.SYSTEM
+    elif sys.argv[1] == "pow":
+        name = Led.POWER
+    elif sys.argv[1] == "fan":
+        name = Led.FAN
+    elif sys.argv[1] == "gps":
+        name = Led.GPS
+    elif sys.argv[1] == "syn":
+        name = Led.SYNC
+    else:
+        print("Led name "+sys.argv[1]+" not recognised")
+        print(usage_string)
+        sys.exit(-1)
+
+    if sys.argv[2] == "on":
+        status = Led.STATUS_ON
+    elif sys.argv[2] == "off":
+        status = Led.STATUS_OFF
+    else:
+        print("Status value "+sys.argv[2]+" not recognised")
+        print(usage_string)
+        sys.exit(-1)
+
+    if sys.argv[3] == "yellow":
+        colour = Led.COLOR_YELLOW
+    elif sys.argv[3] == "green":
+        colour = Led.COLOR_GREEN
+    else:
+        print("Colour value "+sys.argv[3]+" not recognised")
+        print(usage_string)
+        sys.exit(-1)
+
+    if sys.argv[4] == "solid":
+        blink = Led.BLINK_STATUS_SOLID
+    elif sys.argv[4] == "blink":
+        blink = Led.BLINK_STATUS_BLINKING
+    else:
+        print("Blink value "+sys.argv[4]+" not recognised")
+        print(usage_string)
+        sys.exit(-1)
+
+    set_led(name, status, colour, blink)

@@ -1,0 +1,5 @@
+# Automatically added by dh_systemd_start/13.24.2
+if [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
+	deb-systemd-invoke stop 'ufi-stat-led-control.service' >/dev/null || true
+fi
+# End automatically added section
