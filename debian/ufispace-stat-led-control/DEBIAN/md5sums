@@ -1,4 +1,0 @@
-c62865b1d691a4bd3d53b276f30da941  usr/lib/systemd/system/ufi-stat-led-control.service
-58d810927d69a3c421aedb2b2f7254bc  usr/sbin/ufi-stat-led-control
-5ae842a7a89c2b77a065e638825ce272  usr/share/doc/ufispace-stat-led-control/changelog.Debian.gz
-36dca5b01ad40ebd03008618c52906e6  usr/share/doc/ufispace-stat-led-control/copyright

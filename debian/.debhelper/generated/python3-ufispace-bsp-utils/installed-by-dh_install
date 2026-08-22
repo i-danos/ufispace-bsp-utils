@@ -1,4 +1,0 @@
-./debian/i2c_i801.conf
-./debian/ufispace-s9500-bsp-init.conf
-./debian/ufispace-s9500-bsp-init.conf
-./debian/99-ignore-ufi-s9500-30xs-modem.rules

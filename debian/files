@@ -1,4 +1,0 @@
-python3-ufispace-bsp-sfp-helper_3.0.13-0vyatta8_all.deb contrib/net optional
-python3-ufispace-bsp-utils_3.0.13-0vyatta8_all.deb contrib/python optional
-ufispace-bsp-utils_3.0.13-0vyatta8_amd64.buildinfo contrib/net optional
-ufispace-stat-led-control_3.0.13-0vyatta8_all.deb contrib/net optional
