@@ -1,0 +1,10 @@
+/tmp/
+/.debhelper/
+/files
+/*.substvars
+/*.debhelper.log
+/debhelper-build-stamp
+/autoreconf.*
+/python3-ufispace-bsp-utils/
+/python3-ufispace-bsp-sfp-helper/
+/ufispace-stat-led-control/
